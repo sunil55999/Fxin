@@ -279,7 +279,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSubscription(subscription: InsertSubscription): Promise<Subscription> {
-    const [newSubscription] = await db.insert(subscriptions).values(subscription).returning();
+    const [newSubscription] = await db.insert(subscriptions).values([subscription]).returning();
     return newSubscription;
   }
 

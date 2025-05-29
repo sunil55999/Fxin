@@ -97,8 +97,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { email, password } = req.body;
 
-      // Simple admin authentication - in production, use proper auth
-      if (email === "admin@telegrampro.com" && password === "admin123") {
+      const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@telegrampro.com";
+      const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
+
+      if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
         const token = jwt.sign({ email, role: "admin" }, JWT_SECRET, { expiresIn: "24h" });
         res.json({ token, user: { email, role: "admin" } });
       } else {
@@ -299,6 +301,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to update toggles" });
+    }
+  });
+
+  // Individual setting toggle route (matching admin panel requests)
+  app.patch("/api/admin/settings/toggle", requireAuth, async (req, res) => {
+    try {
+      const { key, value } = req.body;
+      
+      // Map the toggle keys to setting names
+      const settingMap: { [key: string]: string } = {
+        plans: "plans_enabled",
+        solo: "solo_enabled", 
+        exness: "exness_enabled"
+      };
+      
+      const settingKey = settingMap[key];
+      if (!settingKey) {
+        return res.status(400).json({ error: "Invalid setting key" });
+      }
+      
+      await storage.setSetting(settingKey, value.toString());
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update setting" });
     }
   });
 
