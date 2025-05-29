@@ -330,6 +330,25 @@ export class DatabaseStorage implements IStorage {
       totalChannels: totalChannelsResult.count,
     };
   }
+
+  // Settings methods
+  async getSettings() {
+    const settingsResult = await db.select().from(settings);
+    const settingsMap: Record<string, string> = {};
+    settingsResult.forEach(setting => {
+      settingsMap[setting.key] = setting.value;
+    });
+    return settingsMap;
+  }
+
+  async updateSetting(key: string, value: string) {
+    await db.insert(settings)
+      .values({ key, value })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value }
+      });
+  }
 }
 
 export const storage = new DatabaseStorage();

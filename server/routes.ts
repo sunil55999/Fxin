@@ -11,7 +11,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "your-jwt-secret-key";
 // Admin authentication middleware
 function requireAuth(req: any, res: any, next: any) {
   const token = req.headers.authorization?.replace("Bearer ", "");
-  
+
   if (!token) {
     return res.status(401).json({ error: "Authentication required" });
   }
@@ -96,7 +96,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/login", async (req, res) => {
     try {
       const { email, password } = req.body;
-      
+
       // Simple admin authentication - in production, use proper auth
       if (email === "admin@telegrampro.com" && password === "admin123") {
         const token = jwt.sign({ email, role: "admin" }, JWT_SECRET, { expiresIn: "24h" });
@@ -124,7 +124,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = (page - 1) * limit;
-      
+
       const users = await storage.getUsers(limit, offset);
       res.json(users);
     } catch (error) {
@@ -291,11 +291,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/admin/toggles", requireAuth, async (req, res) => {
     try {
       const { plans, solo, exness } = req.body;
-      
+
       await storage.setSetting("plans_enabled", plans.toString());
       await storage.setSetting("solo_enabled", solo.toString());
       await storage.setSetting("exness_enabled", exness.toString());
-      
+
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to update toggles" });
@@ -308,7 +308,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = (page - 1) * limit;
-      
+
       const payments = await storage.getPayments(limit, offset);
       res.json(payments);
     } catch (error) {
@@ -334,7 +334,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      
+
       const subscription = await storage.getUserActiveSubscription(user.id);
       res.json({ user, subscription });
     } catch (error) {

@@ -58,7 +58,7 @@ export default function Home() {
             <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
               Access premium Telegram channels with exclusive trading signals, market insights, and expert analysis from professional traders worldwide.
             </p>
-            
+
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
               <Link href="/plans">
                 <Button size="lg" className="button-hover">
@@ -107,7 +107,7 @@ export default function Home() {
               Professional-grade access to premium trading communities and exclusive content
             </p>
           </div>
-          
+
           <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
             {features.map((feature, index) => (
               <Card key={index} className="card-hover">
@@ -154,6 +154,13 @@ export default function Home() {
           </Card>
         </div>
       </section>
+      <footer className="py-8 border-t bg-muted/30">
+          <div className="container mx-auto px-4 text-center">
+            <p className="text-sm text-muted-foreground">
+              © 2024 TelegramPro. All rights reserved. | Professional Telegram Channel Access Platform
+            </p>
+          </div>
+        </footer>
     </div>
   );
 }

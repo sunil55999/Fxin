@@ -194,7 +194,27 @@ export default function Admin() {
 
   const { data: toggles, isLoading: togglesLoading } = useQuery({
     queryKey: ["/api/settings/toggles"],
+    queryFn: async () => {
+      const response = await fetch("/api/settings/toggles", { headers: authHeaders });
+      if (!response.ok) throw new Error("Failed to fetch toggles");
+      return response.json();
+    },
     enabled: isLoggedIn && activeTab === "toggles",
+  });
+
+  // Toggle mutation
+  const updateToggleMutation = useMutation({
+    mutationFn: async ({ key, value }: { key: string; value: boolean }) => {
+      const response = await apiRequest("PATCH", "/api/admin/settings/toggle", { key, value });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/toggles"] });
+      toast({ title: "Success", description: "Setting updated successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update setting", variant: "destructive" });
+    },
   });
 
   // User CRUD mutations
@@ -804,7 +824,10 @@ export default function Admin() {
                     </div>
                     <Switch 
                       checked={toggles?.plans || false}
-                      disabled={togglesLoading}
+                      disabled={togglesLoading || updateToggleMutation.isPending}
+                      onCheckedChange={(checked) => {
+                        updateToggleMutation.mutate({ key: "plans", value: checked });
+                      }}
                     />
                   </div>
                 </CardContent>
@@ -819,7 +842,10 @@ export default function Admin() {
                     </div>
                     <Switch 
                       checked={toggles?.solo || false}
-                      disabled={togglesLoading}
+                      disabled={togglesLoading || updateToggleMutation.isPending}
+                      onCheckedChange={(checked) => {
+                        updateToggleMutation.mutate({ key: "solo", value: checked });
+                      }}
                     />
                   </div>
                 </CardContent>
@@ -834,7 +860,10 @@ export default function Admin() {
                     </div>
                     <Switch 
                       checked={toggles?.exness || false}
-                      disabled={togglesLoading}
+                      disabled={togglesLoading || updateToggleMutation.isPending}
+                      onCheckedChange={(checked) => {
+                        updateToggleMutation.mutate({ key: "exness", value: checked });
+                      }}
                     />
                   </div>
                 </CardContent>
