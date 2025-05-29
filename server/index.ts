@@ -51,7 +51,11 @@ app.use((req, res, next) => {
       await seedDatabase();
     }
   } catch (error) {
-    console.log("⚠️ Database seeding skipped:", error.message);
+    if (error instanceof Error) {
+      console.log("⚠️ Database seeding skipped:", error.message);
+    } else {
+      console.log("⚠️ Database seeding skipped due to an unknown error:", error);
+    }
   }
 
   // Start Telegram bots

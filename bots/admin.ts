@@ -1,32 +1,74 @@
-import { Bot, Context } from "grammy";
+import { Bot, Context, NextFunction } from "grammy";
 import { storage } from "../server/storage";
+import PQueue from 'p-queue';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { performStartupChannelSync } from './commands/sync'; // Added import
+
+// Remove direct command imports as they will be loaded dynamically
+// import { banCommandHandler } from "./commands/ban";
+// import { unbanCommandHandler } from "./commands/unban";
+// import { terminateCommandHandler } from "./commands/terminate";
+// import { subscriptionsCommandHandler } from "./commands/subscriptions";
+// import { statsCommandHandler } from "./commands/stats";
+// import { syncCommandHandler } from "./commands/sync";
 
 const ADMIN_BOT_TOKEN = process.env.TELEGRAM_ADMIN_BOT_TOKEN || "";
+const ADMIN_LOG_CHANNEL_ID = process.env.ADMIN_LOG_CHANNEL_ID || "";
 
 if (!ADMIN_BOT_TOKEN) {
-  throw new Error("TELEGRAM_ADMIN_BOT_TOKEN is required");
+  throw new Error("TELEGRAM_ADMIN_BOT_TOKEN is required in .env");
 }
+
+const adminIdsEnv = (process.env.TELEGRAM_ADMIN_IDS || "")
+  .split(",")
+  .map(id => parseInt(id.trim(), 10))
+  .filter(id => !isNaN(id));
+
+if (adminIdsEnv.length === 0) {
+  console.warn("TELEGRAM_ADMIN_IDS is not set or contains no valid IDs in .env. Admin bot will not have any authorized admins.");
+}
+const ADMIN_IDS = new Set<number>(adminIdsEnv);
 
 export const adminBot = new Bot(ADMIN_BOT_TOKEN);
 
+// Queue for Telegram API calls to manage rate limits
+// Explicitly typing the queue to handle tasks returning `any` to resolve persistent type issues.
+export const telegramApiQueue = new PQueue<any, any>({ concurrency: 10, interval: 1000, intervalCap: 10 });
+
+// Per-admin command rate limiter (1 command per second)
+const adminCommandTimestamps = new Map<number, number>();
+const ADMIN_COMMAND_RATE_LIMIT_MS = 1000; // 1 command per second
+
 // Middleware to check if user is admin
-async function isAdmin(ctx: Context): Promise<boolean> {
-  // In production, you should maintain a list of admin user IDs
-  const adminIds = (process.env.TELEGRAM_ADMIN_IDS || "").split(",").map(id => parseInt(id.trim()));
+async function isAdmin(ctx: Context, next: NextFunction): Promise<void> {
   const userId = ctx.from?.id;
-  
-  if (!userId || !adminIds.includes(userId)) {
+
+  if (!userId || !ADMIN_IDS.has(userId)) {
     await ctx.reply("❌ Unauthorized. You don't have admin privileges.");
-    return false;
+    return;
   }
-  
-  return true;
+
+  // Rate Limiting
+  const now = Date.now();
+  const lastCommandTime = adminCommandTimestamps.get(userId);
+
+  if (lastCommandTime && (now - lastCommandTime) < ADMIN_COMMAND_RATE_LIMIT_MS) {
+    const timeLeft = Math.ceil((ADMIN_COMMAND_RATE_LIMIT_MS - (now - lastCommandTime)) / 1000);
+    await ctx.reply(`⏳ Rate limit exceeded. Please wait ${timeLeft}s.`);
+    return;
+  }
+  adminCommandTimestamps.set(userId, now);
+
+  await next(); // Proceed to the command handler if admin and not rate-limited
 }
+
+// Apply isAdmin middleware to all commands
+adminBot.use(isAdmin);
 
 // Start command
 adminBot.command("start", async (ctx) => {
-  if (!(await isAdmin(ctx))) return;
-  
   const helpText = `
 🔧 **TelegramPro Admin Bot**
 
@@ -49,8 +91,6 @@ Examples:
 
 // Help command
 adminBot.command("help", async (ctx) => {
-  if (!(await isAdmin(ctx))) return;
-  
   await ctx.reply(`
 🔧 **Admin Commands:**
 
@@ -71,311 +111,10 @@ adminBot.command("help", async (ctx) => {
   `, { parse_mode: "Markdown" });
 });
 
-// Ban user command
-adminBot.command("ban", async (ctx) => {
-  if (!(await isAdmin(ctx))) return;
-  
-  const args = ctx.message?.text?.split(" ");
-  if (!args || args.length < 2) {
-    await ctx.reply("❌ Usage: `/ban <user_id>`\nExample: `/ban 123456789`", { parse_mode: "Markdown" });
-    return;
-  }
-  
-  const userIdOrUsername = args[1];
-  
-  try {
-    let user;
-    
-    // Check if it's a username (starts with @)
-    if (userIdOrUsername.startsWith("@")) {
-      const username = userIdOrUsername.substring(1);
-      user = await storage.getUserByUsername(username);
-    } else {
-      // Assume it's a Telegram ID
-      user = await storage.getUserByTelegramId(userIdOrUsername);
-    }
-    
-    if (!user) {
-      await ctx.reply(`❌ User not found: ${userIdOrUsername}`);
-      return;
-    }
-    
-    // Update user status to inactive
-    await storage.updateUser(user.id, { isActive: false });
-    
-    // TODO: In production, implement actual Telegram channel removal
-    // This would involve using the bot API to remove the user from all channels
-    
-    await ctx.reply(`✅ User banned successfully:
-    
-**User Details:**
-• ID: \`${user.telegramId}\`
-• Username: ${user.username ? `@${user.username}` : "N/A"}
-• Name: ${user.firstName} ${user.lastName || ""}
-• Status: Banned
+// User info command will be loaded dynamically by the command loader
 
-⚠️ **Note:** User has been marked as inactive in the database. In production, they would also be removed from all Telegram channels.`, { parse_mode: "Markdown" });
-    
-  } catch (error) {
-    console.error("Ban command error:", error);
-    await ctx.reply("❌ Error banning user. Please check the logs.");
-  }
-});
-
-// Unban user command
-adminBot.command("unban", async (ctx) => {
-  if (!(await isAdmin(ctx))) return;
-  
-  const args = ctx.message?.text?.split(" ");
-  if (!args || args.length < 2) {
-    await ctx.reply("❌ Usage: `/unban <user_id>`\nExample: `/unban 123456789`", { parse_mode: "Markdown" });
-    return;
-  }
-  
-  const userIdOrUsername = args[1];
-  
-  try {
-    let user;
-    
-    if (userIdOrUsername.startsWith("@")) {
-      const username = userIdOrUsername.substring(1);
-      user = await storage.getUserByUsername(username);
-    } else {
-      user = await storage.getUserByTelegramId(userIdOrUsername);
-    }
-    
-    if (!user) {
-      await ctx.reply(`❌ User not found: ${userIdOrUsername}`);
-      return;
-    }
-    
-    // Check if user has an active subscription
-    const hasActiveSubscription = user.expiryDate && new Date(user.expiryDate) > new Date();
-    
-    if (!hasActiveSubscription) {
-      await ctx.reply(`⚠️ Warning: User ${user.telegramId} doesn't have an active subscription. Unban anyway?
-      
-Use \`/forceunban ${userIdOrUsername}\` to proceed.`, { parse_mode: "Markdown" });
-      return;
-    }
-    
-    // Reactivate user
-    await storage.updateUser(user.id, { isActive: true });
-    
-    // TODO: In production, re-add user to their subscribed channels
-    
-    await ctx.reply(`✅ User unbanned successfully:
-    
-**User Details:**
-• ID: \`${user.telegramId}\`
-• Username: ${user.username ? `@${user.username}` : "N/A"}
-• Status: Active
-• Expiry: ${user.expiryDate ? new Date(user.expiryDate).toLocaleDateString() : "N/A"}
-
-✅ User has been reactivated and should regain access to their subscribed channels.`, { parse_mode: "Markdown" });
-    
-  } catch (error) {
-    console.error("Unban command error:", error);
-    await ctx.reply("❌ Error unbanning user. Please check the logs.");
-  }
-});
-
-// Force unban command
-adminBot.command("forceunban", async (ctx) => {
-  if (!(await isAdmin(ctx))) return;
-  
-  const args = ctx.message?.text?.split(" ");
-  if (!args || args.length < 2) {
-    await ctx.reply("❌ Usage: `/forceunban <user_id>`", { parse_mode: "Markdown" });
-    return;
-  }
-  
-  const userIdOrUsername = args[1];
-  
-  try {
-    let user;
-    
-    if (userIdOrUsername.startsWith("@")) {
-      const username = userIdOrUsername.substring(1);
-      user = await storage.getUserByUsername(username);
-    } else {
-      user = await storage.getUserByTelegramId(userIdOrUsername);
-    }
-    
-    if (!user) {
-      await ctx.reply(`❌ User not found: ${userIdOrUsername}`);
-      return;
-    }
-    
-    await storage.updateUser(user.id, { isActive: true });
-    
-    await ctx.reply(`✅ User force-unbanned: ${user.telegramId}`);
-    
-  } catch (error) {
-    console.error("Force unban command error:", error);
-    await ctx.reply("❌ Error force-unbanning user. Please check the logs.");
-  }
-});
-
-// Terminate subscription command
-adminBot.command("terminate", async (ctx) => {
-  if (!(await isAdmin(ctx))) return;
-  
-  const args = ctx.message?.text?.split(" ");
-  if (!args || args.length < 2) {
-    await ctx.reply("❌ Usage: `/terminate <user_id>`\nExample: `/terminate 123456789`", { parse_mode: "Markdown" });
-    return;
-  }
-  
-  const userIdOrUsername = args[1];
-  
-  try {
-    let user;
-    
-    if (userIdOrUsername.startsWith("@")) {
-      const username = userIdOrUsername.substring(1);
-      user = await storage.getUserByUsername(username);
-    } else {
-      user = await storage.getUserByTelegramId(userIdOrUsername);
-    }
-    
-    if (!user) {
-      await ctx.reply(`❌ User not found: ${userIdOrUsername}`);
-      return;
-    }
-    
-    // Terminate subscription: ban user and expire subscription immediately
-    await storage.updateUser(user.id, { 
-      isActive: false,
-      expiryDate: new Date() // Set expiry to now
-    });
-    
-    // Update subscription status
-    const activeSubscription = await storage.getUserActiveSubscription(user.id);
-    if (activeSubscription) {
-      // Mark subscription as cancelled in database
-      await storage.createSubscription({
-        ...activeSubscription,
-        status: "cancelled",
-        endDate: new Date(),
-      });
-    }
-    
-    await ctx.reply(`✅ Subscription terminated successfully:
-    
-**User Details:**
-• ID: \`${user.telegramId}\`
-• Username: ${user.username ? `@${user.username}` : "N/A"}
-• Status: Terminated
-• Previous Expiry: ${user.expiryDate ? new Date(user.expiryDate).toLocaleDateString() : "N/A"}
-
-⚠️ User has been banned and their subscription has been expired immediately.`, { parse_mode: "Markdown" });
-    
-  } catch (error) {
-    console.error("Terminate command error:", error);
-    await ctx.reply("❌ Error terminating user subscription. Please check the logs.");
-  }
-});
-
-// User info command
-adminBot.command("userinfo", async (ctx) => {
-  if (!(await isAdmin(ctx))) return;
-  
-  const args = ctx.message?.text?.split(" ");
-  if (!args || args.length < 2) {
-    await ctx.reply("❌ Usage: `/userinfo <user_id>`\nExample: `/userinfo 123456789`", { parse_mode: "Markdown" });
-    return;
-  }
-  
-  const userIdOrUsername = args[1];
-  
-  try {
-    let user;
-    
-    if (userIdOrUsername.startsWith("@")) {
-      const username = userIdOrUsername.substring(1);
-      user = await storage.getUserByUsername(username);
-    } else {
-      user = await storage.getUserByTelegramId(userIdOrUsername);
-    }
-    
-    if (!user) {
-      await ctx.reply(`❌ User not found: ${userIdOrUsername}`);
-      return;
-    }
-    
-    const subscription = await storage.getUserActiveSubscription(user.id);
-    const payments = await storage.getUserPayments(user.id);
-    const referrals = await storage.getUserReferrals(user.id);
-    
-    const daysRemaining = user.expiryDate ? 
-      Math.ceil((new Date(user.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 0;
-    
-    await ctx.reply(`👤 **User Information**
-
-**Basic Details:**
-• Telegram ID: \`${user.telegramId}\`
-• Username: ${user.username ? `@${user.username}` : "N/A"}
-• Name: ${user.firstName || "N/A"} ${user.lastName || ""}
-• Status: ${user.isActive ? "✅ Active" : "❌ Inactive"}
-
-**Subscription:**
-• Bundle ID: ${user.bundleId || "N/A"}
-• Solo Channels: ${user.soloChannels?.length || 0}
-• Expiry Date: ${user.expiryDate ? new Date(user.expiryDate).toLocaleDateString() : "N/A"}
-• Days Remaining: ${daysRemaining > 0 ? daysRemaining : "Expired"}
-• Auto Renew: ${user.autoRenew ? "✅ Yes" : "❌ No"}
-
-**Activity:**
-• Member Since: ${new Date(user.createdAt!).toLocaleDateString()}
-• Total Payments: ${payments.length}
-• Referrals Made: ${referrals.length}
-• Referral Code: \`${user.referralCode || "N/A"}\`
-
-**Recent Subscription:**
-${subscription ? `• Type: ${subscription.bundleId ? "Bundle" : "Solo"}
-• Status: ${subscription.status}
-• End Date: ${new Date(subscription.endDate).toLocaleDateString()}` : "• No active subscription"}`, { parse_mode: "Markdown" });
-    
-  } catch (error) {
-    console.error("User info command error:", error);
-    await ctx.reply("❌ Error fetching user information. Please check the logs.");
-  }
-});
-
-// System stats command
-adminBot.command("stats", async (ctx) => {
-  if (!(await isAdmin(ctx))) return;
-  
-  try {
-    const stats = await storage.getStats();
-    
-    await ctx.reply(`📊 **System Statistics**
-
-**Users:**
-• Active Users: ${stats.activeUsers}
-• Expiring Soon (3 days): ${stats.expiringSoon}
-
-**Revenue:**
-• Total Revenue: $${stats.totalRevenue}
-
-**Channels:**
-• Total Channels: ${stats.totalChannels}
-
-**System:**
-• Timestamp: ${new Date().toLocaleString()}
-• Status: ✅ Operational`, { parse_mode: "Markdown" });
-    
-  } catch (error) {
-    console.error("Stats command error:", error);
-    await ctx.reply("❌ Error fetching system statistics. Please check the logs.");
-  }
-});
-
-// List channels command
+// List channels command (remains)
 adminBot.command("channels", async (ctx) => {
-  if (!(await isAdmin(ctx))) return;
-  
   try {
     const channels = await storage.getChannels();
     
@@ -406,13 +145,6 @@ Total: ${channels.length} channels`, { parse_mode: "Markdown" });
   }
 });
 
-// Sync channels command
-adminBot.command("sync", async (ctx) => {
-  if (!(await isAdmin(ctx))) return;
-  
-  await ctx.reply("🔄 Channel sync functionality would be implemented here. This would:\n\n• Fetch all channels where the bot is admin\n• Update channel member counts\n• Sync channel information with database\n• Report any access issues");
-});
-
 // Error handler
 adminBot.catch((err) => {
   const ctx = err.ctx;
@@ -420,8 +152,57 @@ adminBot.catch((err) => {
   return ctx.reply("❌ An unexpected error occurred. Please try again or contact support.");
 });
 
+// Command loader function
+async function loadCommands() {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const commandsPath = path.join(__dirname, 'commands');
+  
+  try {
+    const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js') || file.endsWith('.ts'));
+
+    for (const file of commandFiles) {
+      const commandName = path.parse(file).name; // e.g., "ban" from "ban.ts"
+      if (commandName === 'index') continue; // Skip index file if it exists
+
+      try {
+        const commandModule = await import(path.join(commandsPath, file));
+        // Assuming the handler is the default export or a named export like 'commandHandler' or `${commandName}CommandHandler`
+        const handler = commandModule.default || commandModule.commandHandler || commandModule[`${commandName}CommandHandler`];
+
+        if (typeof handler === 'function') {
+          if (commandName === 'unban') { // Special case for commands with aliases
+            adminBot.command(['unban', 'forceunban'], handler as (ctx: Context) => Promise<void>);
+            console.log(`Loaded command /unban (alias /forceunban) from ${file}`);
+          } else {
+            adminBot.command(commandName, handler as (ctx: Context) => Promise<void>);
+            console.log(`Loaded command /${commandName} from ${file}`);
+          }
+        } else {
+          console.warn(`Could not find a valid handler in ${file} for command /${commandName}`);
+        }
+      } catch (e) {
+        console.error(`Error loading command /${commandName} from ${file}:`, e);
+      }
+    }
+  } catch (error) {
+    console.error("Error reading commands directory:", error);
+  }
+}
+
 // Start the admin bot
-export function startAdminBot() {
+export async function startAdminBot() {
+  await loadCommands(); // Load commands
+
+  // Perform initial channel sync on startup
+  console.log("Performing initial channel sync on startup...");
+  try {
+    await performStartupChannelSync("SystemStartup");
+    console.log("Initial channel sync completed.");
+  } catch (e) {
+    console.error("Error during initial channel sync:", e);
+  }
+
   adminBot.start({
     onStart: (botInfo) => {
       console.log(`✅ Admin bot started: @${botInfo.username}`);

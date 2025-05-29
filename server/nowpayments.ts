@@ -56,7 +56,7 @@ export async function handleNowPaymentsWebhook(req: Request, res: Response) {
           userId,
           amount: pay_amount?.toString() || "0.00",
           currency: pay_currency || "USD",
-          paymentMethod: "nowpayments",
+          method: "nowpayments",
           transactionId: payment_id,
           status: "completed"
         });

@@ -21,6 +21,11 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { type User as UserType, type Subscription } from "@shared/schema";
 
+interface QueryData {
+  user: UserType;
+  subscription: Subscription; // Assuming subscription is always present, adjust if nullable
+}
+
 // Telegram WebApp interface
 declare global {
   interface Window {
@@ -71,7 +76,7 @@ export default function MiniApp() {
   }, []);
 
   // Fetch user data
-  const { data: userData, isLoading, error } = useQuery({
+  const { data: userData, isLoading, error } = useQuery<QueryData, Error>({
     queryKey: [`/api/telegram/user/${telegramUser?.id}`],
     enabled: !!telegramUser?.id,
     retry: 1,
@@ -95,11 +100,11 @@ export default function MiniApp() {
   });
 
   // Calculate days remaining
-  const getDaysRemaining = (expiryDate: string | null) => {
+  const getDaysRemaining = (expiryDate: Date | null) => {
     if (!expiryDate) return 0;
     const now = new Date();
-    const expiry = new Date(expiryDate);
-    const diffTime = expiry.getTime() - now.getTime();
+    // expiryDate is already a Date object
+    const diffTime = expiryDate.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return Math.max(0, diffDays);
   };

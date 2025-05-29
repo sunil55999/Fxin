@@ -7,6 +7,38 @@ import {
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, count, sql } from "drizzle-orm";
 
+// Utility function to normalize soloChannels to number[] | null | undefined
+function normalizeSoloChannels(channels: any): number[] | null | undefined {
+if (channels === undefined) {
+  return undefined; // Let Drizzle handle default if schema has one
+}
+if (channels === null) {
+  return null; // Preserve null
+}
+
+if (Array.isArray(channels)) {
+  const numericChannels = channels.filter(v => typeof v === 'number');
+  if (numericChannels.length !== channels.length) {
+    console.warn("normalizeSoloChannels: Filtered non-numeric values from input array.", JSON.stringify(channels));
+  }
+  return numericChannels; // Return the (potentially empty) array of numbers
+}
+
+if (typeof channels === 'object' && channels !== null) {
+  console.warn("normalizeSoloChannels: Received soloChannels as object, attempting conversion.", JSON.stringify(channels));
+  const values = Object.values(channels);
+  if (values.every(v => typeof v === 'number')) {
+    return values as number[];
+  } else {
+    console.error("normalizeSoloChannels: Failed to convert object values to number[]. Values were not all numbers. Defaulting to empty array.", JSON.stringify(channels));
+    return []; // Default to empty array on failed object conversion
+  }
+}
+
+console.error("normalizeSoloChannels: soloChannels is not an array or a convertible object. Defaulting to empty array.", JSON.stringify(channels));
+return []; // Default to empty array for other unhandled types
+}
+
 export interface IStorage {
   // Users
   getUser(id: number): Promise<User | undefined>;
@@ -91,17 +123,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUser(user: InsertUser): Promise<User> {
-    const [newUser] = await db.insert(users).values([user]).returning();
+    const userToInsert = {
+      ...user,
+      soloChannels: normalizeSoloChannels(user.soloChannels) as number[] | null | undefined,
+    };
+    const [newUser] = await db.insert(users).values([userToInsert]).returning();
     return newUser;
   }
 
   async updateUser(id: number, updates: Partial<InsertUser>): Promise<User | undefined> {
-    const updateData: any = { ...updates, updatedAt: new Date() };
-    // Handle soloChannels array properly
-    if (updates.soloChannels && Array.isArray(updates.soloChannels)) {
-      updateData.soloChannels = updates.soloChannels;
+    const updateData: Partial<InsertUser> & { updatedAt: Date } = {
+      ...updates,
+      updatedAt: new Date(),
+    };
+    if (updates.hasOwnProperty('soloChannels')) { // Check if soloChannels is explicitly in updates
+      updateData.soloChannels = normalizeSoloChannels(updates.soloChannels) as number[] | null | undefined;
     }
-    const [user] = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
+    const [user] = await db.update(users).set(updateData as any).where(eq(users.id, id)).returning(); // Added 'as any' for updateData if issues persist with Partial types
     return user || undefined;
   }
 
@@ -149,7 +187,7 @@ export class DatabaseStorage implements IStorage {
 
   async deleteBundle(id: number): Promise<boolean> {
     const result = await db.delete(bundles).where(eq(bundles.id, id));
-    return result.rowCount > 0;
+    return (result.rowCount || 0) > 0;
   }
 
   // Channels
@@ -186,7 +224,7 @@ export class DatabaseStorage implements IStorage {
 
   async deleteChannel(id: number): Promise<boolean> {
     const result = await db.delete(channels).where(eq(channels.id, id));
-    return result.rowCount > 0;
+    return (result.rowCount || 0) > 0;
   }
 
   async getChannelsByIds(channelIds: number[]): Promise<Channel[]> {
@@ -288,7 +326,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSubscription(subscription: InsertSubscription): Promise<Subscription> {
-    const [newSubscription] = await db.insert(subscriptions).values([subscription]).returning();
+    const subToInsert = {
+      ...subscription,
+      soloChannels: normalizeSoloChannels(subscription.soloChannels) as number[] | null | undefined,
+    };
+    const [newSubscription] = await db.insert(subscriptions).values([subToInsert]).returning();
     return newSubscription;
   }
 
@@ -310,7 +352,7 @@ export class DatabaseStorage implements IStorage {
         lte(subscriptions.endDate, new Date())
       )
     );
-    return result.rowCount;
+    return result.rowCount || 0;
   }
 
   // Stats
@@ -345,7 +387,7 @@ export class DatabaseStorage implements IStorage {
     const settingsResult = await db.select().from(settings);
     const settingsMap: Record<string, string> = {};
     settingsResult.forEach(setting => {
-      settingsMap[setting.key] = setting.value;
+      settingsMap[setting.key] = setting.value ?? "";
     });
     return settingsMap;
   }

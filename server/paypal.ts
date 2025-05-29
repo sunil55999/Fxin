@@ -157,7 +157,7 @@ export async function capturePaypalOrder(req: Request, res: Response) {
           userId,
           amount: req.body.amount || "0.00",
           currency: req.body.currency || "USD",
-          paymentMethod: "paypal",
+          method: "paypal",
           transactionId: orderID,
           status: "completed"
         });

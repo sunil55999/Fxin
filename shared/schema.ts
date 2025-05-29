@@ -49,6 +49,7 @@ export const channels = pgTable("channels", {
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  lastCheckedAt: timestamp("last_checked_at"), // For sync command
 });
 
 // Payments table
