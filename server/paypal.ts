@@ -133,9 +133,42 @@ export async function capturePaypalOrder(req: Request, res: Response) {
     const jsonResponse = JSON.parse(String(body));
     const httpStatusCode = httpResponse.statusCode;
 
+    // If payment successful, activate user subscription
+    if (httpStatusCode === 200 || httpStatusCode === 201) {
+      const { userId, bundleId, duration } = req.body;
+      
+      if (userId && (bundleId || req.body.soloChannels)) {
+        const { storage } = await import("./storage");
+        
+        // Calculate expiry date
+        const expiryDate = new Date();
+        expiryDate.setDate(expiryDate.getDate() + (duration || 30));
+        
+        // Update user with subscription
+        await storage.updateUser(userId, {
+          bundleId: bundleId || null,
+          soloChannels: req.body.soloChannels || null,
+          expiryDate,
+          isActive: true
+        });
+        
+        // Create payment record
+        await storage.createPayment({
+          userId,
+          amount: req.body.amount || "0.00",
+          currency: req.body.currency || "USD",
+          paymentMethod: "paypal",
+          transactionId: orderID,
+          status: "completed"
+        });
+        
+        console.log(`✅ User ${userId} subscription activated via PayPal`);
+      }
+    }
+
     res.status(httpStatusCode).json(jsonResponse);
   } catch (error) {
-    console.error("Failed to create order:", error);
+    console.error("Failed to capture order:", error);
     res.status(500).json({ error: "Failed to capture order." });
   }
 }

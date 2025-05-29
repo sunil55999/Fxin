@@ -1,109 +1,74 @@
-import { storage } from "./storage";
+import { Request, Response } from "express";
 import crypto from "crypto";
+import { storage } from "./storage";
 
-const NOWPAYMENTS_API_KEY = process.env.NOWPAYMENTS_API_KEY || "";
-const NOWPAYMENTS_IPN_SECRET = process.env.NOWPAYMENTS_IPN_SECRET || "";
-
-export async function handleNowPaymentsWebhook(req: any, res: any) {
+export async function handleNowPaymentsWebhook(req: Request, res: Response) {
   try {
+    const { body } = req;
+    const signature = req.headers['x-nowpayments-sig'] as string;
+
     // Verify webhook signature
-    const receivedSignature = req.headers["x-nowpayments-sig"];
-    const expectedSignature = crypto
-      .createHmac("sha512", NOWPAYMENTS_IPN_SECRET)
-      .update(JSON.stringify(req.body))
-      .digest("hex");
+    const secret = process.env.NOWPAYMENTS_IPN_SECRET;
+    if (secret && signature) {
+      const expectedSignature = crypto
+        .createHmac('sha512', secret)
+        .update(JSON.stringify(body))
+        .digest('hex');
 
-    if (receivedSignature !== expectedSignature) {
-      return res.status(400).json({ error: "Invalid signature" });
-    }
-
-    const { payment_id, payment_status, pay_amount, pay_currency, order_id, order_description } = req.body;
-
-    // Find existing payment record
-    const payment = await storage.getPaymentByTransactionId(payment_id);
-    if (!payment) {
-      return res.status(404).json({ error: "Payment not found" });
-    }
-
-    // Update payment status
-    await storage.updatePayment(payment.id, {
-      status: payment_status === "finished" ? "completed" : payment_status === "failed" ? "failed" : "pending",
-      gatewayData: req.body,
-    });
-
-    // If payment is completed, activate user subscription
-    if (payment_status === "finished") {
-      const user = await storage.getUser(payment.userId);
-      if (user) {
-        // Calculate expiry date (30 days from now)
-        const expiryDate = new Date();
-        expiryDate.setDate(expiryDate.getDate() + 30);
-
-        await storage.updateUser(user.id, {
-          isActive: true,
-          expiryDate,
-        });
-
-        // Create subscription record
-        await storage.createSubscription({
-          userId: user.id,
-          bundleId: user.bundleId,
-          soloChannels: user.soloChannels,
-          endDate: expiryDate,
-          status: "active",
-          paymentId: payment.id,
-        });
-
-        // TODO: Notify Telegram bots to grant access
-        console.log(`User ${user.telegramId} payment completed, access granted`);
+      if (signature !== expectedSignature) {
+        console.error("❌ NOWPayments webhook signature verification failed");
+        return res.status(401).json({ error: "Invalid signature" });
       }
     }
 
-    res.json({ success: true });
-  } catch (error) {
-    console.error("NOWPayments webhook error:", error);
-    res.status(500).json({ error: "Webhook processing failed" });
-  }
-}
+    const {
+      payment_id,
+      payment_status,
+      pay_amount,
+      pay_currency,
+      order_id,
+      order_description
+    } = body;
 
-export async function createCryptoPayment(amount: number, currency: string, userId: number, bundleId?: number, soloChannels?: number[]) {
-  try {
-    const response = await fetch("https://api.nowpayments.io/v1/payment", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": NOWPAYMENTS_API_KEY,
-      },
-      body: JSON.stringify({
-        price_amount: amount,
-        price_currency: currency,
-        pay_currency: "btc", // Default to Bitcoin
-        order_id: `order_${Date.now()}`,
-        order_description: bundleId ? `Bundle subscription` : `Solo channels purchase`,
-        ipn_callback_url: `${process.env.BACKEND_URL}/api/payments/now`,
-      }),
-    });
+    console.log(`📨 NOWPayments webhook: ${payment_status} for order ${order_id}`);
 
-    if (!response.ok) {
-      throw new Error("Failed to create crypto payment");
+    // Handle successful payment
+    if (payment_status === "finished" || payment_status === "confirmed") {
+      // Extract user data from order description or order_id
+      const orderData = JSON.parse(order_description || "{}");
+      const { userId, bundleId, soloChannels, duration } = orderData;
+
+      if (userId) {
+        // Calculate expiry date
+        const expiryDate = new Date();
+        expiryDate.setDate(expiryDate.getDate() + (duration || 30));
+
+        // Update user with subscription
+        await storage.updateUser(userId, {
+          bundleId: bundleId || null,
+          soloChannels: soloChannels || null,
+          expiryDate,
+          isActive: true
+        });
+
+        // Create payment record
+        await storage.createPayment({
+          userId,
+          amount: pay_amount?.toString() || "0.00",
+          currency: pay_currency || "USD",
+          paymentMethod: "nowpayments",
+          transactionId: payment_id,
+          status: "completed"
+        });
+
+        console.log(`✅ User ${userId} subscription activated via NOWPayments`);
+      }
     }
 
-    const paymentData = await response.json();
+    res.status(200).json({ status: "ok" });
 
-    // Store payment record
-    await storage.createPayment({
-      userId,
-      method: "crypto",
-      amount: amount.toString(),
-      currency,
-      status: "pending",
-      transactionId: paymentData.payment_id,
-      gatewayData: paymentData,
-    });
-
-    return paymentData;
   } catch (error) {
-    console.error("Crypto payment creation error:", error);
-    throw error;
+    console.error("❌ NOWPayments webhook error:", error);
+    res.status(500).json({ error: "Webhook processing failed" });
   }
 }
