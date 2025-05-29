@@ -96,7 +96,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUser(id: number, updates: Partial<InsertUser>): Promise<User | undefined> {
-    const [user] = await db.update(users).set({ ...updates, updatedAt: new Date() }).where(eq(users.id, id)).returning();
+    const updateData: any = { ...updates, updatedAt: new Date() };
+    // Handle soloChannels array properly
+    if (updates.soloChannels && Array.isArray(updates.soloChannels)) {
+      updateData.soloChannels = updates.soloChannels;
+    }
+    const [user] = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
     return user || undefined;
   }
 
