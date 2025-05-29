@@ -189,6 +189,15 @@ export class DatabaseStorage implements IStorage {
     return result.rowCount > 0;
   }
 
+  async getChannelsByIds(channelIds: number[]): Promise<Channel[]> {
+    return db.select().from(channels).where(
+      and(
+        sql`${channels.id} = ANY(${channelIds})`,
+        eq(channels.isActive, true)
+      )
+    );
+  }
+
   // Payments
   async getPayments(limit = 50, offset = 0): Promise<Payment[]> {
     return db.select().from(payments).limit(limit).offset(offset).orderBy(desc(payments.createdAt));
@@ -331,8 +340,8 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  // Settings methods
-  async getSettings() {
+  // Additional settings helper methods
+  async getAllSettings() {
     const settingsResult = await db.select().from(settings);
     const settingsMap: Record<string, string> = {};
     settingsResult.forEach(setting => {

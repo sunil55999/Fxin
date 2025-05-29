@@ -44,6 +44,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     await handleNowPaymentsWebhook(req, res);
   });
 
+  // Crypto payment endpoint (handle frontend errors)
+  app.post("/api/payments/crypto", async (req, res) => {
+    try {
+      // This would integrate with NOWPayments API
+      const { amount, currency, userId, bundleId } = req.body;
+      
+      if (!amount || !currency) {
+        return res.status(400).json({ error: "Amount and currency are required" });
+      }
+      
+      // For now, return a placeholder response
+      res.json({ 
+        success: true, 
+        message: "Crypto payment processing not fully implemented",
+        paymentId: "placeholder_" + Date.now()
+      });
+    } catch (error) {
+      console.error("Crypto payment error:", error);
+      res.status(500).json({ error: "Failed to process crypto payment" });
+    }
+  });
+
   // Public API routes
   app.get("/api/bundles", async (req, res) => {
     try {

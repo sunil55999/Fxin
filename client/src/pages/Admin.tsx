@@ -59,9 +59,9 @@ const loginSchema = z.object({
 
 // User form schema
 const userSchema = z.object({
-  telegramId: z.string().min(1, "Telegram ID is required"),
+  telegramId: z.string().min(1, "Telegram ID is required").regex(/^\d+$/, "Telegram ID must be numeric"),
   username: z.string().optional(),
-  firstName: z.string().optional(),
+  firstName: z.string().min(1, "First name is required"),
   lastName: z.string().optional(),
   bundleId: z.number().optional(),
   expiryDate: z.string().optional(),
@@ -71,9 +71,9 @@ const userSchema = z.object({
 const bundleSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
-  price: z.string().min(1, "Price is required"),
-  channelCount: z.number().min(1, "Channel count is required"),
-  folderLink: z.string().optional(),
+  price: z.string().min(1, "Price is required").regex(/^\d+(\.\d{1,2})?$/, "Price must be a valid amount"),
+  channelCount: z.number().min(1, "Channel count must be at least 1").max(100, "Channel count cannot exceed 100"),
+  folderLink: z.string().url("Must be a valid URL").optional().or(z.literal("")),
 });
 
 // Channel form schema

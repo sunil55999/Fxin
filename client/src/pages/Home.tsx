@@ -154,13 +154,48 @@ export default function Home() {
           </Card>
         </div>
       </section>
-      <footer className="py-8 border-t bg-muted/30">
-          <div className="container mx-auto px-4 text-center">
-            <p className="text-sm text-muted-foreground">
-              © 2024 TelegramPro. All rights reserved. | Professional Telegram Channel Access Platform
-            </p>
+      {/* Footer */}
+      <footer className="bg-muted py-16">
+        <div className="container mx-auto px-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">TelegramPro</h3>
+              <p className="text-muted-foreground">
+                Premium access to exclusive Telegram trading channels with professional signals and market insights.
+              </p>
+            </div>
+            <div className="space-y-4">
+              <h4 className="font-semibold">Services</h4>
+              <ul className="space-y-2 text-muted-foreground">
+                <li><Link href="/plans">Subscription Plans</Link></li>
+                <li><Link href="/solo">Solo Channels</Link></li>
+                <li><Link href="/exness">Exness Partnership</Link></li>
+                <li><a href="/miniapp">Mini App</a></li>
+              </ul>
+            </div>
+            <div className="space-y-4">
+              <h4 className="font-semibold">Support</h4>
+              <ul className="space-y-2 text-muted-foreground">
+                <li><a href="mailto:support@telegrampro.com">Contact Support</a></li>
+                <li><a href="https://t.me/telegrampro_support">Telegram Support</a></li>
+                <li><a href="/faq">FAQ</a></li>
+                <li><a href="/terms">Terms of Service</a></li>
+              </ul>
+            </div>
+            <div className="space-y-4">
+              <h4 className="font-semibold">Connect</h4>
+              <ul className="space-y-2 text-muted-foreground">
+                <li><a href="https://t.me/telegrampro">Official Channel</a></li>
+                <li><a href="https://twitter.com/telegrampro">Twitter</a></li>
+                <li><a href="https://discord.gg/telegrampro">Discord</a></li>
+              </ul>
+            </div>
           </div>
-        </footer>
+          <div className="border-t mt-12 pt-8 text-center text-muted-foreground">
+            <p>&copy; 2024 TelegramPro. All rights reserved. Built with dedication for the trading community.</p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

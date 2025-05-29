@@ -1,6 +1,10 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { startAdminBot } from "../bots/admin";
+import { startUserBot } from "../bots/user";
+import { seedDatabase } from "./seed";
+import { storage } from "./storage";
 
 const app = express();
 app.use(express.json());
@@ -38,41 +42,31 @@ app.use((req, res, next) => {
 
 (async () => {
   const server = await registerRoutes(app);
-  
-  // Initialize Telegram bots if tokens are provided
+
+  // Initialize database with seed data if empty
+  try {
+    const existingBundles = await storage.getBundles();
+    if (existingBundles.length === 0) {
+      console.log("🌱 Database appears empty, seeding with default data...");
+      await seedDatabase();
+    }
+  } catch (error) {
+    console.log("⚠️ Database seeding skipped:", error.message);
+  }
+
+  // Start Telegram bots
   if (process.env.TELEGRAM_ADMIN_BOT_TOKEN) {
-    try {
-      const { startAdminBot } = await import("../bots/admin");
-      startAdminBot();
-    } catch (error) {
-      console.error("❌ Failed to start admin bot:", error);
-    }
-  }
-  
-  if (process.env.TELEGRAM_USER_BOT_TOKEN) {
-    try {
-      const { startUserBot } = await import("../bots/user");
-      startUserBot();
-    } catch (error) {
-      console.error("❌ Failed to start user bot:", error);
-    }
+    console.log("🤖 Starting Telegram bots...");
+    startAdminBot();
+    startUserBot();
   }
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
-  });
-
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
+  // In production, the frontend files are served from the dist folder
+  if (app.get("env") === "production") {
     serveStatic(app);
+  } else {
+    // In development, we use Vite's dev server
+    await setupVite(app, server);
   }
 
   // ALWAYS serve the app on port 5000
