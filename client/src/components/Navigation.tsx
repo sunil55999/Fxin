@@ -50,13 +50,7 @@ export default function Navigation() {
             <NavLinks />
           </div>
 
-          <div className="flex items-center space-x-4">
-            <Link href="/admin">
-              <Button variant="outline" size="sm">
-                Admin
-              </Button>
-            </Link>
-
+          <div className="flex items-center">
             {/* Mobile Navigation */}
             <Sheet open={isOpen} onOpenChange={setIsOpen}>
               <SheetTrigger asChild className="md:hidden">
@@ -68,11 +62,6 @@ export default function Navigation() {
               <SheetContent side="right">
                 <div className="grid gap-6 py-6">
                   <NavLinks mobile />
-                  <Link href="/admin" onClick={() => setIsOpen(false)}>
-                    <Button variant="outline" className="w-full">
-                      Admin Panel
-                    </Button>
-                  </Link>
                 </div>
               </SheetContent>
             </Sheet>

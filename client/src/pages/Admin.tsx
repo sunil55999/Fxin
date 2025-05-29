@@ -197,6 +197,141 @@ export default function Admin() {
     enabled: isLoggedIn && activeTab === "toggles",
   });
 
+  // User CRUD mutations
+  const createUserMutation = useMutation({
+    mutationFn: async (data: z.infer<typeof userSchema>) => {
+      const response = await apiRequest("POST", "/api/admin/users", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Success", description: "User created successfully" });
+      setEditingUser(null);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to create user", variant: "destructive" });
+    },
+  });
+
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: z.infer<typeof userSchema> }) => {
+      const response = await apiRequest("PATCH", `/api/admin/users/${id}`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Success", description: "User updated successfully" });
+      setEditingUser(null);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update user", variant: "destructive" });
+    },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await apiRequest("DELETE", `/api/admin/users/${id}`, {});
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Success", description: "User deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete user", variant: "destructive" });
+    },
+  });
+
+  // Bundle CRUD mutations
+  const createBundleMutation = useMutation({
+    mutationFn: async (data: z.infer<typeof bundleSchema>) => {
+      const response = await apiRequest("POST", "/api/admin/bundles", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bundles"] });
+      toast({ title: "Success", description: "Bundle created successfully" });
+      setEditingBundle(null);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to create bundle", variant: "destructive" });
+    },
+  });
+
+  const updateBundleMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: z.infer<typeof bundleSchema> }) => {
+      const response = await apiRequest("PATCH", `/api/admin/bundles/${id}`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bundles"] });
+      toast({ title: "Success", description: "Bundle updated successfully" });
+      setEditingBundle(null);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update bundle", variant: "destructive" });
+    },
+  });
+
+  const deleteBundleMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await apiRequest("DELETE", `/api/admin/bundles/${id}`, {});
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bundles"] });
+      toast({ title: "Success", description: "Bundle deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete bundle", variant: "destructive" });
+    },
+  });
+
+  // Channel CRUD mutations
+  const createChannelMutation = useMutation({
+    mutationFn: async (data: z.infer<typeof channelSchema>) => {
+      const response = await apiRequest("POST", "/api/admin/channels", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/channels"] });
+      toast({ title: "Success", description: "Channel created successfully" });
+      setEditingChannel(null);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to create channel", variant: "destructive" });
+    },
+  });
+
+  const updateChannelMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: z.infer<typeof channelSchema> }) => {
+      const response = await apiRequest("PATCH", `/api/admin/channels/${id}`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/channels"] });
+      toast({ title: "Success", description: "Channel updated successfully" });
+      setEditingChannel(null);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update channel", variant: "destructive" });
+    },
+  });
+
+  const deleteChannelMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await apiRequest("DELETE", `/api/admin/channels/${id}`, {});
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/channels"] });
+      toast({ title: "Success", description: "Channel deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete channel", variant: "destructive" });
+    },
+  });
+
   // Logout function
   const handleLogout = () => {
     localStorage.removeItem("admin-token");
