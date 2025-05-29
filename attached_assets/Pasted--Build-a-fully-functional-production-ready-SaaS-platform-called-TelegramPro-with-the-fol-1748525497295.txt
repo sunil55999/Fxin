@@ -1,0 +1,220 @@
+🎯 Build a fully functional, **production-ready SaaS platform** called **TelegramPro**, with the following components:
+
+---
+
+## 🔧 TECH STACK (USE THESE TOOLS)
+
+- **Frontend (Public site + Mini App)**: React 18 + TailwindCSS + Vite + TypeScript
+- **Backend API**: Node.js + Express + TypeScript + Drizzle ORM (PostgreSQL)
+- **Admin Panel**: React + Shadcn UI + TailwindCSS + Dark/black theme
+- **Bots**: Node.js + [grammY](https://grammy.dev/) for Telegram interaction
+- **Database**: PostgreSQL (use Drizzle ORM for schema/migrations)
+- **Scheduler**: node-cron for CRON jobs
+- **Deployment ready**: Use `.env`, support PM2, include README.md
+
+---
+
+## 🧩 SYSTEM ARCHITECTURE OVERVIEW
+
+You are building a SaaS that:
+- Allows users to buy access to **Telegram channel bundles** or **solo channels**
+- Uses two bots:
+  - ✅ One for **Admin control** (banning/unbanning)
+  - ✅ One for **User notifications** (reminders, confirmations)
+- Supports **subscription renewals**
+- Supports **crypto and PayPal payments**
+- Admins manage users, pages, plans, content via a secure Admin Panel
+
+This must be **hostable on any VPS** (Replit, EC2, DigitalOcean, Render, Railway, etc.)
+
+---
+
+## 💻 WHAT TO BUILD (EXACTLY)
+
+### 1. FRONTEND (React + TailwindCSS + Black Theme)
+
+#### Public Website (4 Pages)
+- **Landing Page**: Hero section, buttons:
+  - "Subscribe to a Bundle"
+  - "Buy Solo Channels"
+  - "Exness Partner Access"
+
+- **Plans Page**:
+  - Show 2 plans (Bundle A – 60 channels, Bundle B – 30 channels)
+  - Price, description, “Subscribe” button
+
+- **Solo Channels Page**:
+  - Show channel list
+  - User selects channels (1–5 max)
+  - Auto-calculate pricing:
+    - 1 = $10
+    - 2–5 = $15 total
+
+- **Exness Page**:
+  - Show static instructions for joining via broker partnership (editable via Admin Panel)
+
+#### Mini App (Telegram WebApp UI)
+- After login, user sees:
+  - Current subscription
+  - Days remaining
+  - Folder link to Telegram bundle
+  - Renew button
+  - Referral code/stats (optional)
+
+---
+
+### 2. BACKEND (Express + Drizzle ORM + PostgreSQL)
+
+#### Core Features:
+- Manage users, subscriptions, bundles, channels, payments
+- PayPal + NOWPayments webhooks
+- Referral system (optional)
+- Email/SMS hooks (optional via SMTP config)
+
+#### Endpoints to Implement:
+- `/api/users`, `/api/bundles`, `/api/channels`
+- `/api/payments/paypal`, `/api/payments/now` (webhook handlers)
+- `/api/pages/:slug` – editable page content
+- `/api/toggles` – enable/disable site buttons (Plans/Solo/Exness)
+- `/api/referrals/:ref` – referral tracking
+- `/api/subscriptions/renew` – manual renewals
+
+---
+
+### 3. ADMIN PANEL (React + TailwindCSS + Shadcn UI)
+
+- Admin login screen
+- Tabs:
+  - **Dashboard**: show stats (active subs, revenue, expiring soon)
+  - **Users**: list/search, add manually with custom duration, terminate
+  - **Bundles**: CRUD, assign Telegram channels
+  - **Channels**: assign as solo or part of bundle
+  - **Pages**: WYSIWYG editing of 3 public pages (Plans, Solo, Exness)
+  - **Toggles**: Enable/disable frontend buttons
+  - **Payments**: log of PayPal and crypto transactions
+  - **Referrals**: top referrers + count
+
+---
+
+### 4. TELEGRAM BOTS (grammY – 2 bots)
+
+#### Admin Bot
+- On startup:
+  - Fetch all channels where it is admin → store in DB
+- Commands:
+  - `/ban [user_id]` – ban from all channels
+  - `/unban [user_id]` – unban from all channels
+  - `/terminate [user_id]` – ban + expire subscription
+- Also handles channel adding/removal and sync
+
+#### User Bot
+- On subscription:
+  - Send welcome + folder invite
+- 3 days before expiry:
+  - Send renewal reminder
+- On expiry:
+  - Notify user + revoke access
+
+Commands:
+- `/status` – current plan, expiry
+- `/help`
+
+---
+
+## 💰 PAYMENT LOGIC (INTEGRATE BOTH)
+
+### PayPal (One-time or subscription)
+- Checkout → webhook confirms → update DB → notify bots
+
+### NOWPayments (Crypto)
+- Accept BTC, ETH, USDT
+- Webhook confirms payment
+- Update DB → notify bots → send folder access
+
+### Subscription Renewal
+- Manual: user pays again → webhook triggers renewal
+- Auto-renew (PayPal): webhook extends expiry
+
+---
+
+## ⏱️ CRON JOBS (node-cron)
+
+- Run hourly:
+  - Revoke expired access (remove from channels)
+  - Mark subscription inactive
+- Run daily:
+  - 3-day reminders
+
+---
+
+## 🧠 DATABASE SCHEMA (PostgreSQL via Drizzle ORM)
+
+Create tables:
+
+- `users`: telegram_id, username, bundle_id, solo_channels[], expiry_date, auto_renew
+- `bundles`: id, name, folder_link
+- `channels`: id, title, invite_link, bundle_id, is_solo
+- `payments`: id, user_id, method, amount, status
+- `settings`: key, value
+- `referrals`: referrer_id, referred_user_id
+- `pages`: slug, content (editable content)
+
+---
+
+## 📁 FOLDER STRUCTURE
+
+/frontend → React (Public pages + Mini App)
+/backend → Express API + Drizzle ORM
+/bots/admin → Admin-only bot
+/bots/user → User interaction bot
+/admin → Admin Dashboard UI
+/cron → Scheduled cleanup/reminder jobs
+
+yaml
+Copy
+Edit
+
+---
+
+## 🔐 .env.example (Create This)
+
+DATABASE_URL=
+TELEGRAM_ADMIN_BOT_TOKEN=
+TELEGRAM_USER_BOT_TOKEN=
+NOWPAYMENTS_API_KEY=
+PAYPAL_CLIENT_ID=
+PAYPAL_CLIENT_SECRET=
+JWT_SECRET=
+FRONTEND_URL=
+BACKEND_URL=
+SMTP_HOST=
+SMTP_USER=
+SMTP_PASS=
+
+yaml
+Copy
+Edit
+
+---
+
+## 📘 README.md INSTRUCTIONS
+
+Must include:
+
+1. Project overview
+2. Required technologies
+3. `.env` instructions
+4. How to:
+   - Install packages
+   - Initialize DB with Drizzle
+   - Run backend + frontend
+   - Run both bots with `pm2`
+   - Deploy on VPS
+5. Folder structure
+6. Usage & extension notes
+
+---
+
+✅ The entire codebase must be **clean, well-commented, and modular**, using only the listed tech stack, fully ready to run on any VPS.
+
+I will update the `.env` file manually after project generation.
