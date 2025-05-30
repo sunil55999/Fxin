@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import { storage } from "../server/storage";
-import { sendExpiryReminder, sendExpiryNotification } from "../server/telegram";
+import { sendExpiryReminder, sendExpiryNotification, getUserTelegramChatIds, manageUserInChannel } from "../server/telegram"; // Added getUserTelegramChatIds, manageUserInChannel
 
 // Run every hour to check for expired subscriptions
 cron.schedule("0 * * * *", async () => {
@@ -22,10 +22,28 @@ cron.schedule("0 * * * *", async () => {
         // Send expiry notification
         if (user.telegramId) {
           await sendExpiryNotification(user.telegramId);
+
+          // Remove user from Telegram channels
+          const userTelegramIdNum = parseInt(user.telegramId, 10);
+          if (!isNaN(userTelegramIdNum)) {
+            const chatIds = await getUserTelegramChatIds(user.telegramId);
+            let successCount = 0;
+            let failCount = 0;
+            for (const chatId of chatIds) {
+              if (await manageUserInChannel(chatId, userTelegramIdNum, 'kick')) {
+                successCount++;
+              } else {
+                failCount++;
+              }
+            }
+            console.log(`Deactivated expired user: ${user.telegramId}. Removed from ${successCount} channel(s). Failed for ${failCount} channel(s).`);
+          } else {
+            console.error(`Invalid Telegram ID format for user ${user.id}: ${user.telegramId}`);
+            console.log(`Deactivated expired user: ${user.telegramId}. Could not process channel removal due to invalid ID format.`);
+          }
+        } else {
+           console.log(`Deactivated expired user: ${user.id} (no Telegram ID).`);
         }
-        
-        // TODO: Remove user from Telegram channels
-        console.log(`Deactivated expired user: ${user.telegramId}`);
       }
     }
   } catch (error) {

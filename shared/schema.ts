@@ -175,11 +175,27 @@ export const referralsRelations = relations(referrals, ({ one }) => ({
 }));
 
 // Insert schemas
-export const insertUserSchema = createInsertSchema(users).omit({
+export const insertUserSchema = createInsertSchema(users, {
+  // Make soloChannels explicitly an array of numbers if provided
+  soloChannels: z.array(z.number()).optional().nullable(),
+}).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
 });
+
+// Schema for updating users, also with strict soloChannels
+export const updateUserSchema = createInsertSchema(users, {
+  soloChannels: z.array(z.number()).optional().nullable(),
+})
+  .omit({
+    id: true, // Usually ID is not part of update payload directly, but used in WHERE
+    telegramId: true, // Usually not changed
+    referralCode: true, // Usually not changed
+    createdAt: true,
+    updatedAt: true, // Handled by DB or storage layer
+  })
+  .partial(); // All fields are optional for updates
 
 export const insertBundleSchema = createInsertSchema(bundles).omit({
   id: true,
@@ -214,7 +230,10 @@ export const insertPageSchema = createInsertSchema(pages).omit({
   updatedAt: true,
 });
 
-export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
+export const insertSubscriptionSchema = createInsertSchema(subscriptions, {
+  // Make soloChannels explicitly an array of numbers if provided
+  soloChannels: z.array(z.number()).optional().nullable(),
+}).omit({
   id: true,
   createdAt: true,
 });
@@ -222,6 +241,7 @@ export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type UpdateUser = z.infer<typeof updateUserSchema>; // Added UpdateUser type
 export type Bundle = typeof bundles.$inferSelect;
 export type InsertBundle = z.infer<typeof insertBundleSchema>;
 export type Channel = typeof channels.$inferSelect;

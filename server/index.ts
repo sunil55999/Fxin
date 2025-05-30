@@ -1,3 +1,13 @@
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('!!! UNHANDLED REJECTION AT !!!', promise, 'reason:', reason);
+  // process.exit(1); // Application specific logging, throwing an error, or other logic here
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('!!! UNCAUGHT EXCEPTION !!!', error);
+  // process.exit(1); // Application specific logging, throwing an error, or other logic here
+});
+import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";

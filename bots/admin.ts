@@ -4,7 +4,7 @@ import PQueue from 'p-queue';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { performStartupChannelSync } from './commands/sync'; // Added import
+import { performStartupChannelSync, type SyncOperationOutcome } from './commands/sync'; // Added import and SyncOperationOutcome
 
 // Remove direct command imports as they will be loaded dynamically
 // import { banCommandHandler } from "./commands/ban";
@@ -35,7 +35,7 @@ export const adminBot = new Bot(ADMIN_BOT_TOKEN);
 
 // Queue for Telegram API calls to manage rate limits
 // Explicitly typing the queue to handle tasks returning `any` to resolve persistent type issues.
-export const telegramApiQueue = new PQueue<any, any>({ concurrency: 10, interval: 1000, intervalCap: 10 });
+export const telegramApiQueue = new PQueue<() => Promise<SyncOperationOutcome>, SyncOperationOutcome>({ concurrency: 10, interval: 1000, intervalCap: 10 });
 
 // Per-admin command rate limiter (1 command per second)
 const adminCommandTimestamps = new Map<number, number>();
@@ -179,7 +179,7 @@ async function loadCommands() {
             console.log(`Loaded command /${commandName} from ${file}`);
           }
         } else {
-          console.warn(`Could not find a valid handler in ${file} for command /${commandName}`);
+          console.warn(`[CommandLoader] Could not find a valid handler in ${file} for command /${commandName}. Module keys: ${Object.keys(commandModule).join(', ')}`);
         }
       } catch (e) {
         console.error(`Error loading command /${commandName} from ${file}:`, e);

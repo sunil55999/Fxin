@@ -3,8 +3,9 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { createPaypalOrder, capturePaypalOrder, loadPaypalDefault } from "./paypal";
 import { handleNowPaymentsWebhook } from "./nowpayments";
-import { insertUserSchema, insertBundleSchema, insertChannelSchema, insertPaymentSchema, insertPageSchema } from "@shared/schema";
+import { insertUserSchema, updateUserSchema, insertBundleSchema, insertChannelSchema, insertPaymentSchema, insertPageSchema } from "@shared/schema"; // Added updateUserSchema
 import jwt from "jsonwebtoken";
+import { performStartupChannelSync } from "../bots/commands/sync"; // Corrected import path
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-jwt-secret-key";
 
@@ -169,7 +170,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/admin/users/:id", requireAuth, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const updates = req.body;
+      const updates = updateUserSchema.parse(req.body); // Ensure updateUserSchema is used
       const user = await storage.updateUser(id, updates);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
@@ -371,6 +372,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(referrals);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch referrals" });
+    }
+  });
+
+  // Admin action: Trigger channel sync
+  app.post("/api/admin/actions/sync-channels", requireAuth, async (req, res) => {
+    try {
+      console.log("Admin Panel: Channel sync initiated by admin user:", (req as any).user?.email || "Unknown Admin");
+      const results = await performStartupChannelSync(`AdminPanelUI:${(req as any).user?.email || 'Unknown'}`);
+      res.json({
+        success: true,
+        message: "Channel sync process completed.",
+        details: results.details,
+        summary: {
+          successCount: results.successCount,
+          errorCount: results.errorCount,
+          noChatIdCount: results.noChatIdCount
+        }
+      });
+    } catch (error: any) {
+      console.error("Error triggering channel sync from admin panel:", error);
+      res.status(500).json({ success: false, error: "Failed to trigger channel sync.", details: error.message });
     }
   });
 

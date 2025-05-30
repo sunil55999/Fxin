@@ -70,16 +70,11 @@ async function processChannelSync(channel: Channel): Promise<SyncOperationOutcom
       error: e
     };
   }
-  // Fallback return: This should ideally be unreachable if the try/catch above is exhaustive.
-  // It's here to satisfy TypeScript that a SyncOperationOutcome is always returned.
-  console.error("Critical Fallback: Reached end of processChannelSync (should be unreachable) for channel:", channel.id);
-  return {
-    status: "error",
-    channelId: channel.id,
-    channelTitle: channel.title || "Unknown (Fallback)",
-    detail: "Critical error: Unhandled path in processChannelSync (fallback).",
-    error: new Error("UnhandledPathInProcessChannelSyncFallback")
-  };
+  // Fallback: This path should be unreachable if the logic in the try/catch is exhaustive.
+  // If reached, it indicates a logic error or an unexpected execution path.
+  const errorMessage = `Critical Fallback: Unhandled path in processChannelSync for channel ${channel.id}. This indicates a bug.`;
+  console.error(errorMessage);
+  throw new Error(errorMessage);
 } // This correctly closes processChannelSync
 
 // Core logic for channel synchronization, callable without a command context
@@ -104,13 +99,13 @@ export async function performStartupChannelSync(initiatorId?: string | number): 
   
   for (const channel of channelsToCheck) {
     // processChannelSync handles the no-chatId case internally now
-    const taskFunction = async (): Promise<SyncOperationOutcome> => { // Explicitly typed lambda
-      return await processChannelSync(channel);
+    const taskFunction = (): Promise<SyncOperationOutcome> => { // Made non-async, returning the promise directly
+      return processChannelSync(channel); // processChannelSync is async and returns a Promise
     };
     // The 'as any' here is a workaround for the persistent TS error.
     // The outer Promise<SyncOperationOutcome> cast ensures the array type is maintained.
     syncPromises.push(
-      telegramApiQueue.add(taskFunction as any) as Promise<SyncOperationOutcome>
+      telegramApiQueue.add(taskFunction) // Removed 'as any' and redundant Promise cast
     );
   }
 
