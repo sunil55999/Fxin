@@ -33,7 +33,7 @@ export async function setupVite(app: Express, server: Server) {
       ...viteLogger,
       error: (msg, options) => {
         viteLogger.error(msg, options);
-        process.exit(1);
+        // process.exit(1); // Removed to prevent immediate server termination
       },
     },
     server: serverOptions,
@@ -61,6 +61,7 @@ export async function setupVite(app: Express, server: Server) {
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {
+      console.error("!!! ERROR IN VITE REQUEST HANDLER !!!", e); // Added explicit logging
       vite.ssrFixStacktrace(e as Error);
       next(e);
     }

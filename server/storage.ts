@@ -6,6 +6,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, count, sql } from "drizzle-orm";
+import { z } from "zod"; // Import Zod
 
 // Utility function to normalize soloChannels to number[] | null | undefined
 function normalizeSoloChannels(channels: any): number[] | null | undefined {
@@ -136,10 +137,19 @@ export class DatabaseStorage implements IStorage {
       ...updates,
       updatedAt: new Date(),
     };
-    if (updates.hasOwnProperty('soloChannels')) { // Check if soloChannels is explicitly in updates
-      updateData.soloChannels = normalizeSoloChannels(updates.soloChannels) as number[] | null | undefined;
+    if (updates.hasOwnProperty('soloChannels')) {
+      try {
+        // Validate soloChannels format before normalization
+        const soloChannelsSchema = z.array(z.number()).optional().nullable();
+        const validatedSoloChannels = soloChannelsSchema.parse(updates.soloChannels);
+        updateData.soloChannels = normalizeSoloChannels(validatedSoloChannels) as number[] | null | undefined;
+      } catch (zodError: any) {
+        console.error(`[storage.updateUser] Invalid soloChannels format for user ${id}. Received:`, JSON.stringify(updates.soloChannels), "Error:", zodError.errors);
+        // Fallback to null if validation fails, to prevent storing malformed data
+        updateData.soloChannels = null;
+      }
     }
-    const [user] = await db.update(users).set(updateData as any).where(eq(users.id, id)).returning(); // Added 'as any' for updateData if issues persist with Partial types
+    const [user] = await db.update(users).set(updateData as any).where(eq(users.id, id)).returning();
     return user || undefined;
   }
 

@@ -47,7 +47,8 @@ import {
   Trash2,
   LogOut,
   Shield,
-  AlertCircle
+  AlertCircle,
+  RefreshCw // Added for sync button
 } from "lucide-react";
 import { type User, type Bundle, type Channel, type Payment, type Page } from "@shared/schema";
 
@@ -352,6 +353,37 @@ export default function Admin() {
     },
   });
 
+  // Sync Channels Mutation
+  const syncChannelsMutation = useMutation({
+    mutationFn: async () => {
+      // No body needed for this POST request as per current backend setup
+      const response = await apiRequest("POST", "/api/admin/actions/sync-channels", {});
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (data.success && data.summary) {
+        toast({
+          title: "Channel Sync Triggered",
+          description: `Process completed. Success: ${data.summary.successCount}, Errors: ${data.summary.errorCount}, No Chat ID: ${data.summary.noChatIdCount}. Check server logs for full details.`,
+          duration: 7000, // Longer duration for more details
+        });
+        // Optionally, display more details from data.details if needed
+      } else {
+        toast({
+          title: "Channel Sync Completed",
+          description: data.message || "Sync finished with unspecified results.",
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error Triggering Sync",
+        description: error.message || "Failed to start channel sync process.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Logout function
   const handleLogout = () => {
     localStorage.removeItem("admin-token");
@@ -542,6 +574,33 @@ export default function Admin() {
                       System is operating normally. All services are functional.
                     </AlertDescription>
                   </Alert>
+
+                  <Button
+                    onClick={() => syncChannelsMutation.mutate()}
+                    disabled={syncChannelsMutation.isPending}
+                    variant="outline"
+                    className="mt-4"
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${syncChannelsMutation.isPending ? 'animate-spin' : ''}`} />
+                    {syncChannelsMutation.isPending ? "Syncing Channels..." : "Sync All Channels"}
+                  </Button>
+                  {syncChannelsMutation.data && (
+                    <Alert className="mt-4">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        <strong>Last Sync Summary:</strong><br />
+                        Success: {syncChannelsMutation.data.summary?.successCount ?? 'N/A'}<br />
+                        Errors: {syncChannelsMutation.data.summary?.errorCount ?? 'N/A'}<br />
+                        No Chat ID: {syncChannelsMutation.data.summary?.noChatIdCount ?? 'N/A'}
+                        <details className="text-xs mt-1">
+                          <summary>Toggle Full Log (from last run)</summary>
+                          <pre className="whitespace-pre-wrap max-h-40 overflow-y-auto bg-muted p-2 rounded-md">
+                            {(syncChannelsMutation.data.details || ['No details available.']).join('\n')}
+                          </pre>
+                        </details>
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </div>
               </CardContent>
             </Card>

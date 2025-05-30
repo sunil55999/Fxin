@@ -1,5 +1,8 @@
 import { Bot } from "grammy";
 import { storage } from "./storage";
+import { User, Channel, subscriptions as subscriptionsTable } from "../shared/schema"; // Added User, Channel, subscriptionsTable
+import { db } from "./db"; // Added db
+import { eq } from "drizzle-orm"; // Added eq
 
 const ADMIN_BOT_TOKEN = process.env.TELEGRAM_ADMIN_BOT_TOKEN || "";
 const USER_BOT_TOKEN = process.env.TELEGRAM_USER_BOT_TOKEN || "";
@@ -22,10 +25,24 @@ adminBot.command("ban", async (ctx) => {
 
     await storage.updateUser(user.id, { isActive: false });
     
-    // TODO: Remove user from all Telegram channels
-    ctx.reply(`User ${userId} has been banned`);
-  } catch (error) {
-    ctx.reply("Error banning user");
+    const userTelegramIdNum = parseInt(userId, 10);
+    if (isNaN(userTelegramIdNum)) {
+        return ctx.reply("Invalid user ID format. Please provide a numeric Telegram ID.");
+    }
+    const chatIds = await getUserTelegramChatIds(userId);
+    let successCount = 0;
+    let failCount = 0;
+    for (const chatId of chatIds) {
+        if (await manageUserInChannel(chatId, userTelegramIdNum, 'kick')) {
+            successCount++;
+        } else {
+            failCount++;
+        }
+    }
+    ctx.reply(`User ${userId} has been banned. Removed from ${successCount} channel(s). Failed for ${failCount} channel(s).`);
+  } catch (error: any) {
+    console.error("Error in ban command:", error);
+    ctx.reply(`Error banning user: ${error.message || "Unknown error"}`);
   }
 });
 
@@ -43,10 +60,24 @@ adminBot.command("unban", async (ctx) => {
 
     await storage.updateUser(user.id, { isActive: true });
     
-    // TODO: Add user back to their subscribed channels
-    ctx.reply(`User ${userId} has been unbanned`);
-  } catch (error) {
-    ctx.reply("Error unbanning user");
+    const userTelegramIdNum = parseInt(userId, 10);
+    if (isNaN(userTelegramIdNum)) {
+        return ctx.reply("Invalid user ID format. Please provide a numeric Telegram ID.");
+    }
+    const chatIds = await getUserTelegramChatIds(userId);
+    let successCount = 0;
+    let failCount = 0;
+    for (const chatId of chatIds) {
+        if (await manageUserInChannel(chatId, userTelegramIdNum, 'unban')) {
+            successCount++;
+        } else {
+            failCount++;
+        }
+    }
+    ctx.reply(`User ${userId} has been unbanned. They can rejoin ${successCount} channel(s). Failed for ${failCount} channel(s).`);
+  } catch (error: any) {
+    console.error("Error in unban command:", error);
+    ctx.reply(`Error unbanning user: ${error.message || "Unknown error"}`);
   }
 });
 
@@ -67,10 +98,40 @@ adminBot.command("terminate", async (ctx) => {
       expiryDate: new Date() // Expire immediately
     });
     
-    // TODO: Remove user from all channels and mark subscription as cancelled
-    ctx.reply(`User ${userId} subscription has been terminated`);
-  } catch (error) {
-    ctx.reply("Error terminating user subscription");
+    const userTelegramIdNum = parseInt(userId, 10);
+    if (isNaN(userTelegramIdNum)) {
+        return ctx.reply("Invalid user ID format. Please provide a numeric Telegram ID.");
+    }
+    const chatIds = await getUserTelegramChatIds(userId);
+    let successCount = 0;
+    let failCount = 0;
+    for (const chatId of chatIds) {
+        if (await manageUserInChannel(chatId, userTelegramIdNum, 'kick')) {
+            successCount++;
+        } else {
+            failCount++;
+        }
+    }
+
+    // Mark active subscription as cancelled
+    if (user) {
+        const activeSubscription = await storage.getUserActiveSubscription(user.id);
+        if (activeSubscription) {
+            try {
+                await db.update(subscriptionsTable)
+                          .set({ status: 'cancelled' })
+                          .where(eq(subscriptionsTable.id, activeSubscription.id));
+                console.log(`Subscription ${activeSubscription.id} for user ${userId} marked as cancelled.`);
+            } catch (dbError) {
+                console.error(`Failed to mark subscription ${activeSubscription.id} as cancelled for user ${userId}:`, dbError);
+            }
+        }
+    }
+    
+    ctx.reply(`User ${userId} subscription has been terminated. Removed from ${successCount} channel(s). Failed for ${failCount} channel(s).`);
+  } catch (error: any) {
+    console.error("Error in terminate command:", error);
+    ctx.reply(`Error terminating user subscription: ${error.message || "Unknown error"}`);
   }
 });
 
@@ -133,6 +194,83 @@ Need support? Contact our team through the website.
   `;
   ctx.reply(helpMessage);
 });
+
+// Helper function to get all relevant chat IDs for a user
+export async function getUserTelegramChatIds(telegramUserId: string): Promise<string[]> { // Added export
+  const user = await storage.getUserByTelegramId(telegramUserId);
+  if (!user) {
+    console.error(`[getUserTelegramChatIds] User not found for telegramId: ${telegramUserId}`);
+    return [];
+  }
+
+  let channelIdsFromDb: number[] = [];
+
+  // Get channels from bundle if bundleId exists
+  if (user.bundleId) {
+    const bundleChannels = await storage.getChannelsByBundle(user.bundleId);
+    channelIdsFromDb.push(...bundleChannels.map(c => c.id));
+  }
+
+  // Get channels from soloChannels if it exists and has channels
+  if (user.soloChannels && Array.isArray(user.soloChannels) && user.soloChannels.length > 0) {
+    channelIdsFromDb.push(...user.soloChannels);
+  }
+
+  if (channelIdsFromDb.length === 0) {
+    console.log(`[getUserTelegramChatIds] No bundle or solo channels found for user ${telegramUserId}`);
+    return [];
+  }
+
+  // Get unique channel IDs from the database IDs
+  const uniqueChannelIds = Array.from(new Set(channelIdsFromDb));
+  if (uniqueChannelIds.length === 0) {
+    return [];
+  }
+  
+  const channelsDetails = await storage.getChannelsByIds(uniqueChannelIds);
+  
+  const chatIds = channelsDetails
+    .map(c => c.chatId)
+    .filter(chatId => chatId !== null && chatId !== undefined && chatId.trim() !== "") as string[];
+  
+  console.log(`[getUserTelegramChatIds] Found ${chatIds.length} chat IDs for user ${telegramUserId}: ${chatIds.join(', ')}`);
+  return chatIds;
+}
+
+// Helper function to manage user in a channel (kick or unban)
+export async function manageUserInChannel(chatId: string, userTelegramId: number, action: 'kick' | 'unban'): Promise<boolean> { // Added export
+  try {
+    console.log(`[manageUserInChannel] Attempting to ${action} user ${userTelegramId} in chat ${chatId}`);
+    if (action === 'kick') {
+      // banChatMember effectively kicks and prevents rejoining until unbanned.
+      // To just kick without a ban, use kickChatMember.
+      // For "removing access", banChatMember is usually more appropriate.
+      await adminBot.api.banChatMember(chatId, userTelegramId);
+      console.log(`[manageUserInChannel] Successfully kicked/banned user ${userTelegramId} from chat ${chatId}`);
+    } else if (action === 'unban') {
+      await adminBot.api.unbanChatMember(chatId, userTelegramId, { only_if_banned: true });
+      console.log(`[manageUserInChannel] Successfully unbanned user ${userTelegramId} in chat ${chatId}`);
+    }
+    return true;
+  } catch (error: any) {
+    console.error(`[manageUserInChannel] Error ${action}ing user ${userTelegramId} in chat ${chatId}: ${error.message}`);
+    if (error.description) {
+        console.error(`[manageUserInChannel] Telegram API Error: ${error.description}`);
+    }
+    // Common errors:
+    // "Bad Request: user not found" (if user was never in chat or already removed/unbanned)
+    // "Bad Request: chat not found"
+    // "Bad Request: USER_IS_AN_ADMINISTRATOR_OF_THE_CHAT"
+    // "Forbidden: bot is not a member of the chat"
+    // "Forbidden: bot can't restrict self"
+    // "Forbidden: not enough rights to restrict/unrestrict chat member"
+    if (error.description && (error.description.includes("user not found") || error.description.includes("USER_NOT_PARTICIPANT"))) {
+        console.warn(`[manageUserInChannel] User ${userTelegramId} was likely not in chat ${chatId} or already in desired state.`);
+        return true; // Consider it a success if the user is already in the desired state
+    }
+    return false;
+  }
+}
 
 // Send welcome message with folder access
 export async function sendWelcomeMessage(telegramId: string, bundleId?: number) {

@@ -1,0 +1,5 @@
+[2025-05-30T12:10:40.192Z] Admin: 7407955332 (N/A) | Command: /sync  | Details: Channel sync process started by CommandUser:7407955332 
+[2025-05-30T12:11:05.567Z] Admin: 7407955332 (N/A) | Command: /userinfo @fxil_support | Details: Unexpected error for @fxil_support | Error: relation "users" does not exist
+[2025-05-30T12:45:35.090Z] Admin: 7407955332 (N/A) | Command: /userinfo @fxil_support | Details: User not found: @fxil_support 
+[2025-05-30T12:45:41.364Z] Admin: 7407955332 (N/A) | Command: /sync  | Details: Channel sync process started by CommandUser:7407955332 
+[2025-05-30T12:53:51.080Z] Admin: 7407955332 (N/A) | Command: /sync  | Details: Channel sync process started by CommandUser:7407955332 
